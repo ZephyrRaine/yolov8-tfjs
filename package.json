@@ -3,7 +3,7 @@
   "description": "Object detection application right in your browser using YOLOv8 and Tensorflow.js",
   "version": "1.0.0",
   "scripts": {
-    "start": "vite",
+    "start": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "gh-pages -d dist"

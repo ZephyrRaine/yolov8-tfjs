@@ -27,6 +27,34 @@
   border-radius: 5px;
 }
 
+.model-selector {
+  margin: 10px 0;
+}
+
+.model-selector label {
+  margin-right: 10px;
+  font-weight: bold;
+}
+
+.model-selector select {
+  padding: 5px 10px;
+  border: 2px solid #333;
+  border-radius: 5px;
+  background-color: white;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.model-selector select:disabled {
+  background-color: #f0f0f0;
+  cursor: not-allowed;
+}
+
+.model-selector select:hover:not(:disabled) {
+  border-color: #666;
+}
+
 .content > img {
   display: none;
   width: 100%;
@@ -70,4 +98,74 @@ button:hover {
   color: black;
   background-color: white;
   border: 2px solid black;
+}
+
+/* Person crops section styles */
+.person-crops-section {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #f5f5f5;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.person-crops-section h3 {
+  margin-bottom: 15px;
+  color: #333;
+  text-align: center;
+}
+
+.person-crops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.person-crop-item {
+  background-color: white;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease;
+}
+
+.person-crop-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.person-crop-item img {
+  width: 100%;
+  height: auto;
+  max-height: 150px;
+  object-fit: cover;
+  border-radius: 5px;
+  margin-bottom: 8px;
+}
+
+.person-crop-item p {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+  font-weight: bold;
+}
+
+.clear-crops-btn {
+  background-color: #dc3545;
+  border: 2px solid #dc3545;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.clear-crops-btn:hover {
+  background-color: #c82333;
+  border-color: #c82333;
+  color: white;
 }

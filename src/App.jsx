@@ -4,6 +4,7 @@ import "@tensorflow/tfjs-backend-webgl"; // set backend to webgl
 import Loader from "./components/loader";
 import ButtonHandler from "./components/btn-handler";
 import { detect, detectVideo } from "./utils/detect";
+import { getAvailableModels, getModelConfig } from "./utils/modelConfig";
 import "./style/App.css";
 
 const App = () => {
@@ -12,6 +13,9 @@ const App = () => {
     net: null,
     inputShape: [1, 0, 0, 3],
   }); // init model & input shape
+  const [personCrops, setPersonCrops] = useState([]); // state for storing person crops
+  const [selectedModel, setSelectedModel] = useState("yolov8n_clothes"); // selected model
+  const [availableModels] = useState(getAvailableModels()); // available models
 
   // references
   const imageRef = useRef(null);
@@ -19,19 +23,29 @@ const App = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
-  // model configs
-  const modelName = "yolov8n";
+  // callback function to handle detected objects
+  const handleObjectsDetected = (crops) => {
+    setPersonCrops(prevCrops => {
+      // Keep only the latest 10 object crops to avoid memory issues
+      const newCrops = [...prevCrops, ...crops];
+      return newCrops.slice(-10);
+    });
+  };
 
-  useEffect(() => {
-    tf.ready().then(async () => {
+  // function to load model
+  const loadModel = async (modelName) => {
+    setLoading({ loading: true, progress: 0 });
+    setPersonCrops([]); // clear previous crops when switching models
+    
+    try {
       const yolov8 = await tf.loadGraphModel(
         `${window.location.href}/${modelName}_web_model/model.json`,
         {
           onProgress: (fractions) => {
-            setLoading({ loading: true, progress: fractions }); // set loading fractions
+            setLoading({ loading: true, progress: fractions });
           },
         }
-      ); // load model
+      );
 
       // warming up model
       const dummyInput = tf.ones(yolov8.inputs[0].shape);
@@ -41,11 +55,31 @@ const App = () => {
       setModel({
         net: yolov8,
         inputShape: yolov8.inputs[0].shape,
-      }); // set model & input shape
+      });
 
-      tf.dispose([warmupResults, dummyInput]); // cleanup memory
+      tf.dispose([warmupResults, dummyInput]);
+    } catch (error) {
+      console.error("Error loading model:", error);
+      setLoading({ loading: false, progress: 0 });
+    }
+  };
+
+  useEffect(() => {
+    tf.ready().then(() => {
+      loadModel(selectedModel);
     });
   }, []);
+
+  useEffect(() => {
+    if (model.net) {
+      loadModel(selectedModel);
+    }
+  }, [selectedModel]);
+
+  // handle model selection change
+  const handleModelChange = (event) => {
+    setSelectedModel(event.target.value);
+  };
 
   return (
     <div className="App">
@@ -55,8 +89,23 @@ const App = () => {
         <p>
           YOLOv8 live detection application on browser powered by <code>tensorflow.js</code>
         </p>
+        <div className="model-selector">
+          <label htmlFor="model-select">Model: </label>
+          <select 
+            id="model-select"
+            value={selectedModel} 
+            onChange={handleModelChange}
+            disabled={loading.loading}
+          >
+            {availableModels.map(modelName => (
+              <option key={modelName} value={modelName}>
+                {getModelConfig(modelName).displayName}
+              </option>
+            ))}
+          </select>
+        </div>
         <p>
-          Serving : <code className="code">{modelName}</code>
+          Serving : <code className="code">{selectedModel}</code>
         </p>
       </div>
 
@@ -64,22 +113,42 @@ const App = () => {
         <img
           src="#"
           ref={imageRef}
-          onLoad={() => detect(imageRef.current, model, canvasRef.current)}
+          onLoad={() => detect(imageRef.current, model, canvasRef.current, () => {}, handleObjectsDetected, selectedModel)}
         />
         <video
           autoPlay
           muted
           ref={cameraRef}
-          onPlay={() => detectVideo(cameraRef.current, model, canvasRef.current)}
+          onPlay={() => detectVideo(cameraRef.current, model, canvasRef.current, handleObjectsDetected, selectedModel)}
         />
         <video
           autoPlay
           muted
           ref={videoRef}
-          onPlay={() => detectVideo(videoRef.current, model, canvasRef.current)}
+          onPlay={() => detectVideo(videoRef.current, model, canvasRef.current, handleObjectsDetected, selectedModel)}
         />
         <canvas width={model.inputShape[1]} height={model.inputShape[2]} ref={canvasRef} />
       </div>
+
+      {personCrops.length > 0 && (
+        <div className="person-crops-section">
+          <h3>Detected {getModelConfig(selectedModel).targetClass.charAt(0).toUpperCase() + getModelConfig(selectedModel).targetClass.slice(1)} ({personCrops.length})</h3>
+          <div className="person-crops-grid">
+            {personCrops.map((crop, index) => (
+              <div key={crop.id} className="person-crop-item">
+                <img src={crop.dataURL} alt={`${crop.className} ${index + 1}`} />
+                <p>Confidence: {crop.score}%</p>
+              </div>
+            ))}
+          </div>
+          <button 
+            className="clear-crops-btn"
+            onClick={() => setPersonCrops([])}
+          >
+            Clear All Crops
+          </button>
+        </div>
+      )}
 
       <ButtonHandler imageRef={imageRef} cameraRef={cameraRef} videoRef={videoRef} />
     </div>
