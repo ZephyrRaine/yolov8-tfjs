@@ -12,6 +12,15 @@
 Object Detection application right in your browser. Serving YOLOv8 in browser using tensorflow.js
 with `webgl` backend.
 
+**Installation**
+
+[Install npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
+
+Install yarn : 
+```bash
+npm install --global yarn
+```
+
 **Setup**
 
 ```bash
