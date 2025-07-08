@@ -1,3 +1,4 @@
+// ...existing imports...
 import React, { useState, useEffect, useRef } from "react";
 import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-backend-webgl"; // set backend to webgl
@@ -16,6 +17,7 @@ const App = () => {
   const [personCrops, setPersonCrops] = useState([]); // state for storing person crops
   const [selectedModel, setSelectedModel] = useState("yolov8n_clothes"); // selected model
   const [availableModels] = useState(getAvailableModels()); // available models
+  const [hasCaptured, setHasCaptured] = useState(false); // state to track if an image has been captured
 
   // references
   const imageRef = useRef(null);
@@ -25,18 +27,24 @@ const App = () => {
 
   // callback function to handle detected objects
   const handleObjectsDetected = (crops) => {
-    setPersonCrops(prevCrops => {
-      // Keep only the latest 10 object crops to avoid memory issues
-      const newCrops = [...prevCrops, ...crops];
-      return newCrops.slice(-10);
-    });
+    if (hasCaptured) return; // Stop processing if an image has already been captured
+
+    const filteredCrops = crops.filter(
+      (crop) => crop.className === "clothing" && crop.score >= 90
+    );
+
+    if (filteredCrops.length > 0) {
+      setPersonCrops(filteredCrops);
+      setHasCaptured(true); // Mark as captured to stop further detections
+    }
   };
 
   // function to load model
   const loadModel = async (modelName) => {
     setLoading({ loading: true, progress: 0 });
     setPersonCrops([]); // clear previous crops when switching models
-    
+    setHasCaptured(false); // Reset capture state
+
     try {
       const yolov8 = await tf.loadGraphModel(
         `${window.location.href}/${modelName}_web_model/model.json`,
@@ -132,7 +140,7 @@ const App = () => {
 
       {personCrops.length > 0 && (
         <div className="person-crops-section">
-          <h3>Detected {getModelConfig(selectedModel).targetClass.charAt(0).toUpperCase() + getModelConfig(selectedModel).targetClass.slice(1)} ({personCrops.length})</h3>
+          <h3>Detected Clothing ({personCrops.length})</h3>
           <div className="person-crops-grid">
             {personCrops.map((crop, index) => (
               <div key={crop.id} className="person-crop-item">
@@ -143,7 +151,10 @@ const App = () => {
           </div>
           <button 
             className="clear-crops-btn"
-            onClick={() => setPersonCrops([])}
+            onClick={() => {
+              setPersonCrops([]);
+              setHasCaptured(false); // Allow capturing again
+            }}
           >
             Clear All Crops
           </button>
