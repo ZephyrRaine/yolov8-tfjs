@@ -1,7 +1,6 @@
-// ...existing imports...
 import React, { useState, useEffect, useRef } from "react";
 import * as tf from "@tensorflow/tfjs";
-import "@tensorflow/tfjs-backend-webgl"; // set backend to webgl
+import "@tensorflow/tfjs-backend-webgl";
 import Loader from "./components/loader";
 import ButtonHandler from "./components/btn-handler";
 import { detect, detectVideo } from "./utils/detect";
@@ -9,25 +8,37 @@ import { getAvailableModels, getModelConfig } from "./utils/modelConfig";
 import "./style/App.css";
 
 const App = () => {
-  const [loading, setLoading] = useState({ loading: true, progress: 0 }); // loading state
-  const [model, setModel] = useState({
-    net: null,
-    inputShape: [1, 0, 0, 3],
-  }); // init model & input shape
-  const [personCrops, setPersonCrops] = useState([]); // state for storing person crops
-  const [selectedModel, setSelectedModel] = useState("yolov8n_clothes"); // selected model
-  const [availableModels] = useState(getAvailableModels()); // available models
-  const [hasCaptured, setHasCaptured] = useState(false); // state to track if an image has been captured
+  const [loading, setLoading] = useState({ loading: true, progress: 0 });
+  const [model, setModel] = useState({ net: null, inputShape: [1, 0, 0, 3] });
+  const [personCrops, setPersonCrops] = useState([]);
+  const [selectedModel, setSelectedModel] = useState("yolov8n_clothes");
+  const [availableModels] = useState(getAvailableModels());
+  const [hasCaptured, setHasCaptured] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
 
-  // references
   const imageRef = useRef(null);
   const cameraRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
-  // callback function to handle detected objects
+  const analyseImage = async (base64Image) => {
+    try {
+      const response = await fetch("http://localhost:5000/api/analyse-clothing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64Image }),
+      });
+
+      const data = await response.json();
+      console.log("📝 Analyse GPT-4 Vision :", data.result);
+      setAnalysisResult(data.result);
+    } catch (error) {
+      console.error("❌ Erreur analyseImage :", error);
+    }
+  };
+
   const handleObjectsDetected = (crops) => {
-    if (hasCaptured) return; // Stop processing if an image has already been captured
+    if (hasCaptured) return;
 
     const filteredCrops = crops.filter(
       (crop) => crop.className === "clothing" && crop.score >= 90
@@ -35,15 +46,22 @@ const App = () => {
 
     if (filteredCrops.length > 0) {
       setPersonCrops(filteredCrops);
-      setHasCaptured(true); // Mark as captured to stop further detections
+      setHasCaptured(true);
+
+      const firstCrop = filteredCrops[0];
+      if (firstCrop.dataURL) {
+        analyseImage(firstCrop.dataURL);
+      } else {
+        console.warn("❗ Aucun dataURL trouvé pour le crop détecté.");
+      }
     }
   };
 
-  // function to load model
   const loadModel = async (modelName) => {
     setLoading({ loading: true, progress: 0 });
-    setPersonCrops([]); // clear previous crops when switching models
-    setHasCaptured(false); // Reset capture state
+    setPersonCrops([]);
+    setHasCaptured(false);
+    setAnalysisResult(null);
 
     try {
       const yolov8 = await tf.loadGraphModel(
@@ -55,15 +73,11 @@ const App = () => {
         }
       );
 
-      // warming up model
       const dummyInput = tf.ones(yolov8.inputs[0].shape);
       const warmupResults = yolov8.execute(dummyInput);
 
       setLoading({ loading: false, progress: 1 });
-      setModel({
-        net: yolov8,
-        inputShape: yolov8.inputs[0].shape,
-      });
+      setModel({ net: yolov8, inputShape: yolov8.inputs[0].shape });
 
       tf.dispose([warmupResults, dummyInput]);
     } catch (error) {
@@ -84,28 +98,31 @@ const App = () => {
     }
   }, [selectedModel]);
 
-  // handle model selection change
   const handleModelChange = (event) => {
     setSelectedModel(event.target.value);
   };
 
   return (
     <div className="App">
-      {loading.loading && <Loader>Loading model... {(loading.progress * 100).toFixed(2)}%</Loader>}
+      {loading.loading && (
+        <Loader>Loading model... {(loading.progress * 100).toFixed(2)}%</Loader>
+      )}
+
       <div className="header">
         <h1>📷 YOLOv8 Live Detection App</h1>
         <p>
-          YOLOv8 live detection application on browser powered by <code>tensorflow.js</code>
+          YOLOv8 live detection application on browser powered by{" "}
+          <code>tensorflow.js</code>
         </p>
         <div className="model-selector">
           <label htmlFor="model-select">Model: </label>
-          <select 
+          <select
             id="model-select"
-            value={selectedModel} 
+            value={selectedModel}
             onChange={handleModelChange}
             disabled={loading.loading}
           >
-            {availableModels.map(modelName => (
+            {availableModels.map((modelName) => (
               <option key={modelName} value={modelName}>
                 {getModelConfig(modelName).displayName}
               </option>
@@ -121,21 +138,50 @@ const App = () => {
         <img
           src="#"
           ref={imageRef}
-          onLoad={() => detect(imageRef.current, model, canvasRef.current, () => {}, handleObjectsDetected, selectedModel)}
+          onLoad={() =>
+            detect(
+              imageRef.current,
+              model,
+              canvasRef.current,
+              () => {},
+              handleObjectsDetected,
+              selectedModel
+            )
+          }
         />
         <video
           autoPlay
           muted
           ref={cameraRef}
-          onPlay={() => detectVideo(cameraRef.current, model, canvasRef.current, handleObjectsDetected, selectedModel)}
+          onPlay={() =>
+            detectVideo(
+              cameraRef.current,
+              model,
+              canvasRef.current,
+              handleObjectsDetected,
+              selectedModel
+            )
+          }
         />
         <video
           autoPlay
           muted
           ref={videoRef}
-          onPlay={() => detectVideo(videoRef.current, model, canvasRef.current, handleObjectsDetected, selectedModel)}
+          onPlay={() =>
+            detectVideo(
+              videoRef.current,
+              model,
+              canvasRef.current,
+              handleObjectsDetected,
+              selectedModel
+            )
+          }
         />
-        <canvas width={model.inputShape[1]} height={model.inputShape[2]} ref={canvasRef} />
+        <canvas
+          width={model.inputShape[1]}
+          height={model.inputShape[2]}
+          ref={canvasRef}
+        />
       </div>
 
       {personCrops.length > 0 && (
@@ -149,11 +195,12 @@ const App = () => {
               </div>
             ))}
           </div>
-          <button 
+          <button
             className="clear-crops-btn"
             onClick={() => {
               setPersonCrops([]);
-              setHasCaptured(false); // Allow capturing again
+              setHasCaptured(false);
+              setAnalysisResult(null);
             }}
           >
             Clear All Crops
@@ -161,7 +208,18 @@ const App = () => {
         </div>
       )}
 
-      <ButtonHandler imageRef={imageRef} cameraRef={cameraRef} videoRef={videoRef} />
+      {analysisResult && (
+        <div className="analysis-result">
+          <h3>Analyse GPT-4 Vision</h3>
+          <pre>{analysisResult}</pre>
+        </div>
+      )}
+
+      <ButtonHandler
+        imageRef={imageRef}
+        cameraRef={cameraRef}
+        videoRef={videoRef}
+      />
     </div>
   );
 };
