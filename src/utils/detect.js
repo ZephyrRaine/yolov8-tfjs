@@ -117,7 +117,9 @@ export const detect = async (
       classes_data,
       [xRatio, yRatio],
       0.85, // confidence threshold
-      modelName
+      modelName,
+      modelWidth,
+      modelHeight
     );
     if (objectCrops.length > 0) {
       onPersonsDetected(objectCrops);
@@ -138,18 +140,26 @@ export const detect = async (
  * @param {HTMLCanvasElement} canvasRef canvas reference
  * @param {Function} onPersonsDetected callback function to handle detected persons
  * @param {string} modelName name of the model being used
+ * @param {Function} shouldStop callback function to check if detection should stop
  */
 export const detectVideo = (
   vidSource,
   model,
   canvasRef,
   onPersonsDetected = null,
-  modelName = "yolov8n_clothes"
+  modelName = "yolov8n_clothes",
+  shouldStop = () => false
 ) => {
   /**
    * Function to detect every frame from video
    */
   const detectFrame = async () => {
+    // Check if detection should stop
+    if (shouldStop()) {
+      console.log("🛑 Detection stopped by shouldStop callback");
+      return;
+    }
+
     // Check if video is ready and has valid dimensions
     if (
       !vidSource.srcObject ||

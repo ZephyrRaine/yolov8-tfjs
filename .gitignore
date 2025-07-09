@@ -1,32 +1,37 @@
+# Dependencies
+node_modules/
+yarn.lock
+package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# SSL certificates
+*.pem
+cert.pem
+key.pem
+
+# Saved images (contains personal data)
+server/saved_images/
+
+# Build outputs
+dist/
+build/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
 # Logs
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.env
-
-# SSL certificates (security sensitive)
-*.pem
-cert.pem
-key.pem
-server/cert.pem
-server/key.pem

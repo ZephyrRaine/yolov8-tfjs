@@ -12,13 +12,23 @@ const App = () => {
   const [model, setModel] = useState({ net: null, inputShape: [1, 0, 0, 3] });
   const [personCrops, setPersonCrops] = useState([]);
   const [selectedModel] = useState("yolov8n_clothes");
-  const [hasCaptured, setHasCaptured] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [appState, setAppState] = useState('loading'); // 'loading', 'instructions', 'ready'
   const [streaming, setStreaming] = useState(null);
+  
+  // Countdown states
+  const [countdownActive, setCountdownActive] = useState(false);
+  const [countdownValue, setCountdownValue] = useState(5);
+  const [detectionStopped, setDetectionStopped] = useState(false);
+  const [analysisSent, setAnalysisSent] = useState(false);
 
   const cameraRef = useRef(null);
   const canvasRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
+  const detectionActiveRef = useRef(true);
+  const analysisSentRef = useRef(false);
+  const countdownStartedRef = useRef(false);
+  const detectionStoppedRef = useRef(false);
   const webcam = new Webcam();
 
   const analyseImage = async (base64Image) => {
@@ -37,56 +47,161 @@ const App = () => {
     }
   };
 
-  const handleObjectsDetected = (crops) => {
-    if (hasCaptured) return;
-
-    // Store detected crops during the 6-second window
-    const currentTime = Date.now();
-    if (!window.captureStartTime) {
-      window.captureStartTime = currentTime;
-      window.capturedCrops = [];
+  const startCountdown = () => {
+    // Use ref to immediately prevent multiple starts
+    if (countdownStartedRef.current || detectionStoppedRef.current || analysisSentRef.current) {
+      return;
     }
+    
+    console.log("🎯 Starting 5-second countdown...");
+    countdownStartedRef.current = true; // Immediately set to prevent multiple starts
+    setCountdownActive(true);
+    setCountdownValue(5);
+    
+    countdownIntervalRef.current = setInterval(() => {
+      setCountdownValue((prev) => {
+        if (prev <= 1) {
+          // Countdown finished
+          clearInterval(countdownIntervalRef.current);
+          setCountdownActive(false);
+          setDetectionStopped(true);
+          detectionStoppedRef.current = true; // Stop countdown from retriggering
+          detectionActiveRef.current = false; // Stop detection loop
+          
+          // Auto-analyze the best crop (only if not already sent)
+          setTimeout(() => {
+            setPersonCrops(currentCrops => {
+              if (currentCrops.length > 0 && !analysisSentRef.current) {
+                console.log("📸 Sending best crop for analysis...");
+                analysisSentRef.current = true; // Mark as sent to prevent duplicates
+                setAnalysisSent(true); // Update UI state
+                analyseImage(currentCrops[0].dataURL);
+              }
+              return currentCrops;
+            });
+          }, 500);
+          
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
-    // Filter crops with confidence >= 85
-    const filteredCrops = crops.filter(
+  const handleObjectsDetected = (crops) => {
+    // Filter crops with confidence >= 70 to trigger countdown
+    const triggerCrops = crops.filter(
+      (crop) => crop.className === "clothing" && crop.score >= 70
+    );
+
+    // Filter crops with confidence >= 85 for display
+    const displayCrops = crops.filter(
       (crop) => crop.className === "clothing" && crop.score >= 85
     );
 
-    // Add filtered crops to the captured list
-    window.capturedCrops.push(...filteredCrops);
-
-    // Check if 6 seconds have passed
-    if (currentTime - window.captureStartTime >= 6000) {
-      window.captureStartTime = null; // Reset the timer
-
-      // Select the crop with the highest confidence
-      const bestCrop = window.capturedCrops.reduce((best, crop) => {
-        return crop.score > (best?.score || 0) ? crop : best;
-      }, null);
-
-      if (bestCrop) {
-        setPersonCrops([bestCrop]);
-        setHasCaptured(true);
-
-        // Analyse the best crop
-        if (bestCrop.dataURL) {
-          analyseImage(bestCrop.dataURL);
-        } else {
-          console.warn("❗ Aucun dataURL trouvé pour le crop détecté.");
-        }
-
-        // Stop the webcam after the capture
-        const videoStream = cameraRef.current?.srcObject;
-        if (videoStream) {
-          const tracks = videoStream.getTracks();
-          tracks.forEach((track) => track.stop());
-          cameraRef.current.srcObject = null;
-          console.log("📷 Webcam arrêtée après la capture.");
-        }
-      } else {
-        console.warn("❗ Aucun crop valide détecté pendant les 6 secondes.");
-      }
+    // Start countdown if we have qualifying detections and countdown not started
+    if (triggerCrops.length > 0 && !countdownStartedRef.current && !detectionStoppedRef.current) {
+      startCountdown();
     }
+
+    if (displayCrops.length === 0) return;
+
+    // Update the crops state with the new detections
+    setPersonCrops(prevCrops => {
+      // Combine previous crops with new ones
+      const allCrops = [...prevCrops, ...displayCrops];
+      
+      // Remove duplicates based on similar positions and timing
+      const uniqueCrops = [];
+      const seenPositions = new Set();
+      
+      for (const crop of allCrops) {
+        const positionKey = `${Math.round(crop.bbox.x1/10)}_${Math.round(crop.bbox.y1/10)}`;
+        if (!seenPositions.has(positionKey)) {
+          seenPositions.add(positionKey);
+          uniqueCrops.push(crop);
+        }
+      }
+      
+      // Sort by confidence score (highest first) and take top 10
+      const sortedCrops = uniqueCrops
+        .sort((a, b) => parseFloat(b.score) - parseFloat(a.score))
+        .slice(0, 10);
+      
+      return sortedCrops;
+    });
+  };
+
+  const resetDetection = () => {
+    setCountdownActive(false);
+    setCountdownValue(5);
+    setDetectionStopped(false);
+    detectionStoppedRef.current = false; // Reset detection ref (for logic)
+    setAnalysisSent(false); // Reset analysis flag (for UI)
+    analysisSentRef.current = false; // Reset analysis ref (for logic)
+    countdownStartedRef.current = false; // Reset countdown ref (for logic)
+    setPersonCrops([]);
+    setAnalysisResult(null);
+    detectionActiveRef.current = true;
+    
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+    }
+    
+    console.log("🔄 Detection reset - ready for new detection");
+  };
+
+  const startDetectionProcess = () => {
+    // Only start detection if video has valid dimensions
+    if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
+      console.log("🎯 Starting detection with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+      detectVideo(
+        cameraRef.current,
+        model,
+        canvasRef.current,
+        handleObjectsDetected,
+        selectedModel,
+        () => !detectionActiveRef.current // shouldStop callback
+      );
+    } else {
+      console.warn("⚠️ Video dimensions not ready, waiting...");
+      setTimeout(() => {
+        if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
+          console.log("🎯 Starting detection after delay with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+          detectVideo(
+            cameraRef.current,
+            model,
+            canvasRef.current,
+            handleObjectsDetected,
+            selectedModel,
+            () => !detectionActiveRef.current // shouldStop callback
+          );
+        }
+      }, 500);
+    }
+  };
+
+  const restartCompleteProcess = () => {
+    // Reset all states and flags that could block countdown
+    setCountdownActive(false);
+    setCountdownValue(5);
+    setDetectionStopped(false);           // ← BLOCKS countdown if true (UI)
+    detectionStoppedRef.current = false;  // ← BLOCKS countdown if true (logic)
+    setAnalysisSent(false);
+    analysisSentRef.current = false;      // ← BLOCKS countdown if true  
+    countdownStartedRef.current = false;  // ← BLOCKS countdown if true
+    setPersonCrops([]);
+    setAnalysisResult(null);
+    detectionActiveRef.current = true;    // Make sure detection is active
+    
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+    }
+    
+    // Start detection using the exact same logic as the original
+    startDetectionProcess();
+    
+    console.log("🔄 Complete process restarted - ready for new detection");
   };
   
 
@@ -94,7 +209,6 @@ const App = () => {
     setLoading({ loading: true, progress: 0 });
     setAppState('loading');
     setPersonCrops([]);
-    setHasCaptured(false);
     setAnalysisResult(null);
 
     try {
@@ -133,6 +247,15 @@ const App = () => {
       loadModel(selectedModel);
     }
   }, [selectedModel]);
+
+  // Cleanup countdown interval on component unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, []);
 
 
 
@@ -187,33 +310,7 @@ const App = () => {
               playsInline
               ref={cameraRef}
               style={{ display: 'none' }}
-              onPlay={() => {
-                // Only start detection if video has valid dimensions
-                if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
-                  console.log("🎯 Starting detection with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
-                  detectVideo(
-                    cameraRef.current,
-                    model,
-                    canvasRef.current,
-                    handleObjectsDetected,
-                    selectedModel
-                  );
-                } else {
-                  console.warn("⚠️ Video dimensions not ready, waiting...");
-                  setTimeout(() => {
-                    if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
-                      console.log("🎯 Starting detection after delay with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
-                      detectVideo(
-                        cameraRef.current,
-                        model,
-                        canvasRef.current,
-                        handleObjectsDetected,
-                        selectedModel
-                      );
-                    }
-                  }, 500);
-                }
-              }}
+              onPlay={startDetectionProcess}
               onLoadedMetadata={() => {
                 console.log("📹 Video metadata loaded with dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
               }}
@@ -223,31 +320,38 @@ const App = () => {
               height={model.inputShape[2]}
               ref={canvasRef}
             />
+            
+            {/* Countdown Overlay */}
+            {countdownActive && (
+              <div className="countdown-overlay">
+                <div className="countdown-display">
+                  <h2>Vêtement détecté!</h2>
+                  <div className="countdown-number">{countdownValue}</div>
+                  <p>Capture automatique dans...</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Detection Status */}
+            {detectionStopped && (
+              <div className="detection-status">
+                <p>✅ Détection terminée - Analyse en cours...</p>
+              </div>
+            )}
           </div>
 
           {personCrops.length > 0 && (
             <div className="person-crops-section">
-              <h3>Vêtements détectés ({personCrops.length})</h3>
+              <h3>Vêtements détectés (Top {personCrops.length})</h3>
               <div className="person-crops-grid">
                 {personCrops.map((crop, index) => (
                   <div key={crop.id} className="person-crop-item">
                     <img src={crop.dataURL} alt={`${crop.className} ${index + 1}`} />
                     <p>Confiance: {crop.score}%</p>
+                    {index === 0 && <p style={{color: '#4CAF50', fontSize: '10px'}}>MEILLEUR</p>}
                   </div>
                 ))}
               </div>
-              {personCrops.length > 0 && !hasCaptured && (
-            <button
-              className="clear-crops-btn"
-              onClick={() => {
-                setPersonCrops([]);
-                setHasCaptured(false);
-                setAnalysisResult(null);
-              }}
-            >
-              Effacer tout
-            </button>
-          )}
             </div>
           )}
 
@@ -259,15 +363,9 @@ const App = () => {
               <div className="analysis-buttons">
                 <button
                   className="next-analysis-btn"
-                  onClick={() => {
-                    setPersonCrops([]);
-                    setHasCaptured(false);
-                    setAnalysisResult(null);
-                    setAppState('ready');
-                    setStreaming('starting');
-                  }}
+                  onClick={restartCompleteProcess}
                 >
-                  Analyse suivante
+                  Nouvelle analyse
                 </button>
 
                 <button

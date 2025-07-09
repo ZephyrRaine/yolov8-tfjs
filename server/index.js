@@ -19,11 +19,48 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "10mb" })); // Increase limit for base64 images
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Create images directory if it doesn't exist
+const imagesDir = path.join(__dirname, "saved_images");
+if (!fs.existsSync(imagesDir)) {
+  fs.mkdirSync(imagesDir, { recursive: true });
+  console.log("✅ Created images directory:", imagesDir);
+}
+
+// Function to save base64 image locally
+function saveImageLocally(base64Data, filename) {
+  try {
+    // Remove the data URL prefix (data:image/jpeg;base64,) if present
+    const base64Image = base64Data.replace(/^data:image\/[a-z]+;base64,/, "");
+
+    // Convert base64 to buffer
+    const imageBuffer = Buffer.from(base64Image, "base64");
+
+    // Create full path
+    const fullPath = path.join(imagesDir, filename);
+
+    // Save the image
+    fs.writeFileSync(fullPath, imageBuffer);
+
+    console.log("💾 Image saved locally:", fullPath);
+    return fullPath;
+  } catch (error) {
+    console.error("❌ Error saving image:", error);
+    throw error;
+  }
+}
+
+// Function to generate unique filename
+function generateUniqueFilename(extension = "jpg") {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const randomId = Math.random().toString(36).substring(2, 15);
+  return `clothing_analysis_${timestamp}_${randomId}.${extension}`;
+}
 
 const promptText = `
 Tu es un assistant spécialisé en description des vêtements et détection très précise de taches pour personnes non voyantes ou malvoyantes.
@@ -87,6 +124,10 @@ app.post("/api/analyse-clothing", async (req, res) => {
   if (!image) return res.status(400).json({ error: "No image provided" });
 
   try {
+    // Save the image locally
+    const filename = generateUniqueFilename();
+    const savedImagePath = saveImageLocally(image, filename);
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -107,7 +148,10 @@ app.post("/api/analyse-clothing", async (req, res) => {
     const result = response.choices[0].message.content;
     console.log("📝 Réponse GPT-4 Vision :", result);
 
-    res.json({ result });
+    res.json({
+      result,
+      savedImagePath: savedImagePath, // Include the saved image path in response
+    });
   } catch (error) {
     console.error("OpenAI error:", error);
     res.status(500).json({ error: "OpenAI Vision API error" });
