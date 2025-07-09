@@ -1,23 +1,25 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-backend-webgl";
-import Loader from "./components/loader";
-import ButtonHandler from "./components/btn-handler";
+import LoadingPopup from "./components/loading-popup";
+import InstructionsPopup from "./components/instructions-popup";
 import { detect, detectVideo } from "./utils/detect";
-import { getAvailableModels, getModelConfig } from "./utils/modelConfig";
+import { Webcam } from "./utils/webcam";
 import "./style/App.css";
 
 const App = () => {
   const [loading, setLoading] = useState({ loading: true, progress: 0 });
   const [model, setModel] = useState({ net: null, inputShape: [1, 0, 0, 3] });
   const [personCrops, setPersonCrops] = useState([]);
-  const [selectedModel, setSelectedModel] = useState("yolov8n_clothes");
-  const [availableModels] = useState(getAvailableModels());
+  const [selectedModel] = useState("yolov8n_clothes");
   const [hasCaptured, setHasCaptured] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [appState, setAppState] = useState('loading'); // 'loading', 'instructions', 'ready'
+  const [streaming, setStreaming] = useState(null);
 
   const cameraRef = useRef(null);
   const canvasRef = useRef(null);
+  const webcam = new Webcam();
 
   const analyseImage = async (base64Image) => {
     try {
@@ -68,6 +70,7 @@ const App = () => {
 
   const loadModel = async (modelName) => {
     setLoading({ loading: true, progress: 0 });
+    setAppState('loading');
     setPersonCrops([]);
     setHasCaptured(false);
     setAnalysisResult(null);
@@ -87,11 +90,13 @@ const App = () => {
 
       setLoading({ loading: false, progress: 1 });
       setModel({ net: yolov8, inputShape: yolov8.inputs[0].shape });
+      setAppState('instructions');
 
       tf.dispose([warmupResults, dummyInput]);
     } catch (error) {
       console.error("Error loading model:", error);
       setLoading({ loading: false, progress: 0 });
+      setAppState('ready'); // Still allow user to try again
     }
   };
 
@@ -107,65 +112,63 @@ const App = () => {
     }
   }, [selectedModel]);
 
-  const handleModelChange = (event) => {
-    setSelectedModel(event.target.value);
+
+
+  const handleStartFromInstructions = () => {
+    setAppState('ready');
+    setStreaming('starting'); // Signal that we want to start the camera
   };
+
+  // Handle camera start after DOM is ready
+  useEffect(() => {
+    const startCamera = async () => {
+      if (appState === 'ready' && streaming === 'starting' && cameraRef.current) {
+        try {
+          await webcam.open(cameraRef.current);
+          
+          // Show video and apply styling
+          cameraRef.current.style.display = "block";
+          cameraRef.current.style.width = "100%";
+          cameraRef.current.style.maxWidth = "720px";
+          cameraRef.current.style.height = "auto";
+          cameraRef.current.style.borderRadius = "10px";
+          
+          setStreaming("camera");
+        } catch (error) {
+          console.error("❌ Error opening camera:", error);
+          alert("Failed to open camera: " + error.message);
+          setStreaming(null);
+        }
+      }
+    };
+
+    startCamera();
+  }, [appState, streaming]);
 
   return (
     <div className="App">
-      {loading.loading && (
-        <Loader>Loading model... {(loading.progress * 100).toFixed(2)}%</Loader>
+      {appState === 'loading' && <LoadingPopup progress={loading.progress} />}
+      {appState === 'instructions' && <InstructionsPopup onStart={handleStartFromInstructions} />}
+
+      {appState === 'ready' && (
+        <div className="header">
+          <h1>Détecteur de taches</h1>
+        </div>
       )}
 
-      <div className="header">
-        <h1>📷 YOLOv8 Live Detection App</h1>
-        <p>
-          YOLOv8 live detection application on browser powered by{" "}
-          <code>tensorflow.js</code>
-        </p>
-        <div className="model-selector">
-          <label htmlFor="model-select">Model: </label>
-          <select
-            id="model-select"
-            value={selectedModel}
-            onChange={handleModelChange}
-            disabled={loading.loading}
-          >
-            {availableModels.map((modelName) => (
-              <option key={modelName} value={modelName}>
-                {getModelConfig(modelName).displayName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <p>
-          Serving : <code className="code">{selectedModel}</code>
-        </p>
-      </div>
-
-      <div className="content">
-        <video
-          autoPlay
-          muted
-          playsInline
-          ref={cameraRef}
-          style={{ display: 'none' }}
-          onPlay={() => {
-            // Only start detection if video has valid dimensions
-            if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
-              console.log("🎯 Starting detection with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
-              detectVideo(
-                cameraRef.current,
-                model,
-                canvasRef.current,
-                handleObjectsDetected,
-                selectedModel
-              );
-            } else {
-              console.warn("⚠️ Video dimensions not ready, waiting...");
-              setTimeout(() => {
+      {appState === 'ready' && (
+        <>
+          <div className="content">
+            <video
+              autoPlay
+              muted
+              playsInline
+              ref={cameraRef}
+              style={{ display: 'none' }}
+              onPlay={() => {
+                // Only start detection if video has valid dimensions
                 if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
-                  console.log("🎯 Starting detection after delay with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+                  console.log("🎯 Starting detection with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
                   detectVideo(
                     cameraRef.current,
                     model,
@@ -173,55 +176,67 @@ const App = () => {
                     handleObjectsDetected,
                     selectedModel
                   );
+                } else {
+                  console.warn("⚠️ Video dimensions not ready, waiting...");
+                  setTimeout(() => {
+                    if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
+                      console.log("🎯 Starting detection after delay with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+                      detectVideo(
+                        cameraRef.current,
+                        model,
+                        canvasRef.current,
+                        handleObjectsDetected,
+                        selectedModel
+                      );
+                    }
+                  }, 500);
                 }
-              }, 500);
-            }
-          }}
-          onLoadedMetadata={() => {
-            console.log("📹 Video metadata loaded with dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
-          }}
-        />
-        <canvas
-          width={model.inputShape[1]}
-          height={model.inputShape[2]}
-          ref={canvasRef}
-        />
-      </div>
-
-      {personCrops.length > 0 && (
-        <div className="person-crops-section">
-          <h3>Detected Clothing ({personCrops.length})</h3>
-          <div className="person-crops-grid">
-            {personCrops.map((crop, index) => (
-              <div key={crop.id} className="person-crop-item">
-                <img src={crop.dataURL} alt={`${crop.className} ${index + 1}`} />
-                <p>Confidence: {crop.score}%</p>
-              </div>
-            ))}
+              }}
+              onLoadedMetadata={() => {
+                console.log("📹 Video metadata loaded with dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+              }}
+            />
+            <canvas
+              width={model.inputShape[1]}
+              height={model.inputShape[2]}
+              ref={canvasRef}
+            />
           </div>
-          <button
-            className="clear-crops-btn"
-            onClick={() => {
-              setPersonCrops([]);
-              setHasCaptured(false);
-              setAnalysisResult(null);
-            }}
-          >
-            Clear All Crops
-          </button>
-        </div>
+
+          {personCrops.length > 0 && (
+            <div className="person-crops-section">
+              <h3>Vêtements détectés ({personCrops.length})</h3>
+              <div className="person-crops-grid">
+                {personCrops.map((crop, index) => (
+                  <div key={crop.id} className="person-crop-item">
+                    <img src={crop.dataURL} alt={`${crop.className} ${index + 1}`} />
+                    <p>Confiance: {crop.score}%</p>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="clear-crops-btn"
+                onClick={() => {
+                  setPersonCrops([]);
+                  setHasCaptured(false);
+                  setAnalysisResult(null);
+                }}
+              >
+                Effacer tout
+              </button>
+            </div>
+          )}
+
+          {analysisResult && (
+            <div className="analysis-result">
+              <h3>Analyse GPT-4 Vision</h3>
+              <pre>{analysisResult}</pre>
+            </div>
+          )}
+        </>
       )}
 
-      {analysisResult && (
-        <div className="analysis-result">
-          <h3>Analyse GPT-4 Vision</h3>
-          <pre>{analysisResult}</pre>
-        </div>
-      )}
 
-      <ButtonHandler
-        cameraRef={cameraRef}
-      />
     </div>
   );
 };
