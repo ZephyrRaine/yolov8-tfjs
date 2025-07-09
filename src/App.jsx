@@ -39,7 +39,7 @@ const App = () => {
     if (hasCaptured) return;
   
     const filteredCrops = crops.filter(
-      (crop) => crop.className === "clothing" && crop.score >= 90
+      (crop) => crop.className === "clothing" && crop.score >= 80
     );
   
     if (filteredCrops.length > 0) {
