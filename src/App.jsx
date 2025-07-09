@@ -39,30 +39,52 @@ const App = () => {
 
   const handleObjectsDetected = (crops) => {
     if (hasCaptured) return;
-  
+
+    // Store detected crops during the 6-second window
+    const currentTime = Date.now();
+    if (!window.captureStartTime) {
+      window.captureStartTime = currentTime;
+      window.capturedCrops = [];
+    }
+
+    // Filter crops with confidence >= 85
     const filteredCrops = crops.filter(
-      (crop) => crop.className === "clothing" && crop.score >= 80
+      (crop) => crop.className === "clothing" && crop.score >= 85
     );
-  
-    if (filteredCrops.length > 0) {
-      setPersonCrops(filteredCrops);
-      setHasCaptured(true);
-  
-      // Analyse la première photo capturée
-      const firstCrop = filteredCrops[0];
-      if (firstCrop.dataURL) {
-        analyseImage(firstCrop.dataURL);
+
+    // Add filtered crops to the captured list
+    window.capturedCrops.push(...filteredCrops);
+
+    // Check if 6 seconds have passed
+    if (currentTime - window.captureStartTime >= 6000) {
+      window.captureStartTime = null; // Reset the timer
+
+      // Select the crop with the highest confidence
+      const bestCrop = window.capturedCrops.reduce((best, crop) => {
+        return crop.score > (best?.score || 0) ? crop : best;
+      }, null);
+
+      if (bestCrop) {
+        setPersonCrops([bestCrop]);
+        setHasCaptured(true);
+
+        // Analyse the best crop
+        if (bestCrop.dataURL) {
+          analyseImage(bestCrop.dataURL);
+        } else {
+          console.warn("❗ Aucun dataURL trouvé pour le crop détecté.");
+        }
+
+        // Stop the webcam after the capture
+        const videoStream = cameraRef.current?.srcObject;
+        if (videoStream) {
+          const tracks = videoStream.getTracks();
+          tracks.forEach((track) => track.stop());
+          cameraRef.current.srcObject = null;
+          console.log("📷 Webcam arrêtée après la capture.");
+        }
       } else {
-        console.warn("❗ Aucun dataURL trouvé pour le crop détecté.");
-      }
-  
-      // 🔴 Arrête la webcam après la capture
-      const videoStream = cameraRef.current?.srcObject;
-      if (videoStream) {
-        const tracks = videoStream.getTracks();
-        tracks.forEach((track) => track.stop());
-        cameraRef.current.srcObject = null;
-        console.log("📷 Webcam arrêtée après la capture.");
+        console.warn("❗ Aucun crop valide détecté pendant les 6 secondes.");
       }
     }
   };
@@ -231,6 +253,47 @@ const App = () => {
             <div className="analysis-result">
               <h3>Analyse GPT-4 Vision</h3>
               <pre>{analysisResult}</pre>
+
+              <div className="analysis-buttons">
+                <button
+                  className="next-analysis-btn"
+                  onClick={() => {
+                    setPersonCrops([]);
+                    setHasCaptured(false);
+                    setAnalysisResult(null);
+                    setAppState('ready');
+                    setStreaming('starting');
+                  }}
+                >
+                  Analyse suivante
+                </button>
+
+                <button
+                  className="replay-message-btn"
+                  onClick={() => {
+                    alert(analysisResult); // Simple alert to replay the message
+                  }}
+                >
+                  Relire le message
+                </button>
+
+                <button
+                  className="share-btn"
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Analyse GPT-4 Vision',
+                        text: `Prompt: Analyse de vêtements\n\nRésultat: ${analysisResult}`,
+                        url: window.location.href,
+                      }).catch((error) => console.error('Erreur lors du partage:', error));
+                    } else {
+                      alert('Le partage n\'est pas pris en charge sur ce navigateur.');
+                    }
+                  }}
+                >
+                  Partager
+                </button>
+              </div>
             </div>
           )}
         </>
