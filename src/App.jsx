@@ -39,23 +39,34 @@ const App = () => {
 
   const handleObjectsDetected = (crops) => {
     if (hasCaptured) return;
-
+  
     const filteredCrops = crops.filter(
       (crop) => crop.className === "clothing" && crop.score >= 90
     );
-
+  
     if (filteredCrops.length > 0) {
       setPersonCrops(filteredCrops);
       setHasCaptured(true);
-
+  
+      // Analyse la première photo capturée
       const firstCrop = filteredCrops[0];
       if (firstCrop.dataURL) {
         analyseImage(firstCrop.dataURL);
       } else {
         console.warn("❗ Aucun dataURL trouvé pour le crop détecté.");
       }
+  
+      // 🔴 Arrête la webcam après la capture
+      const videoStream = cameraRef.current?.srcObject;
+      if (videoStream) {
+        const tracks = videoStream.getTracks();
+        tracks.forEach((track) => track.stop());
+        cameraRef.current.srcObject = null;
+        console.log("📷 Webcam arrêtée après la capture.");
+      }
     }
   };
+  
 
   const loadModel = async (modelName) => {
     setLoading({ loading: true, progress: 0 });
