@@ -236,16 +236,18 @@ const App = () => {
                   </div>
                 ))}
               </div>
-              <button
-                className="clear-crops-btn"
-                onClick={() => {
-                  setPersonCrops([]);
-                  setHasCaptured(false);
-                  setAnalysisResult(null);
-                }}
-              >
-                Effacer tout
-              </button>
+              {personCrops.length > 0 && !hasCaptured && (
+            <button
+              className="clear-crops-btn"
+              onClick={() => {
+                setPersonCrops([]);
+                setHasCaptured(false);
+                setAnalysisResult(null);
+              }}
+            >
+              Effacer tout
+            </button>
+          )}
             </div>
           )}
 
