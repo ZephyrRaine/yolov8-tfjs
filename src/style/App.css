@@ -64,11 +64,31 @@
 }
 
 .content > video {
-  display: none;
   width: 100%;
   max-width: 720px;
   max-height: 500px;
   border-radius: 10px;
+  /* iOS Safari specific fixes */
+  -webkit-playsinline: true;
+  object-fit: cover;
+  background-color: #000;
+}
+
+/* iOS Safari video fixes */
+video::-webkit-media-controls {
+  display: none !important;
+}
+
+video::-webkit-media-controls-panel {
+  display: none !important;
+}
+
+video::-webkit-media-controls-play-button {
+  display: none !important;
+}
+
+video::-webkit-media-controls-start-playback-button {
+  display: none !important;
 }
 
 .content {

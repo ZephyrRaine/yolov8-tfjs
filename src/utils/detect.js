@@ -150,10 +150,23 @@ export const detectVideo = (
    * Function to detect every frame from video
    */
   const detectFrame = async () => {
-    if (vidSource.videoWidth === 0 && vidSource.srcObject === null) {
+    // Check if video is ready and has valid dimensions
+    if (
+      !vidSource.srcObject ||
+      vidSource.videoWidth === 0 ||
+      vidSource.videoHeight === 0
+    ) {
       const ctx = canvasRef.getContext("2d");
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); // clean canvas
-      return; // handle if source is closed
+
+      // If video is still loading, try again in a bit
+      if (
+        vidSource.srcObject &&
+        (vidSource.videoWidth === 0 || vidSource.videoHeight === 0)
+      ) {
+        setTimeout(() => requestAnimationFrame(detectFrame), 100);
+      }
+      return; // handle if source is closed or not ready
     }
 
     detect(

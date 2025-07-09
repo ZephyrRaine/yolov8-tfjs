@@ -21,7 +21,7 @@ const App = () => {
 
   const analyseImage = async (base64Image) => {
     try {
-      const response = await fetch("http://localhost:5000/api/analyse-clothing", {
+      const response = await fetch("/api/analyse-clothing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: base64Image }),
@@ -74,7 +74,7 @@ const App = () => {
 
     try {
       const yolov8 = await tf.loadGraphModel(
-        `${window.location.href}/${modelName}_web_model/model.json`,
+        `./${modelName}_web_model/model.json`,
         {
           onProgress: (fractions) => {
             setLoading({ loading: true, progress: fractions });
@@ -147,16 +147,39 @@ const App = () => {
         <video
           autoPlay
           muted
+          playsInline
           ref={cameraRef}
-          onPlay={() =>
-            detectVideo(
-              cameraRef.current,
-              model,
-              canvasRef.current,
-              handleObjectsDetected,
-              selectedModel
-            )
-          }
+          style={{ display: 'none' }}
+          onPlay={() => {
+            // Only start detection if video has valid dimensions
+            if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
+              console.log("🎯 Starting detection with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+              detectVideo(
+                cameraRef.current,
+                model,
+                canvasRef.current,
+                handleObjectsDetected,
+                selectedModel
+              );
+            } else {
+              console.warn("⚠️ Video dimensions not ready, waiting...");
+              setTimeout(() => {
+                if (cameraRef.current.videoWidth > 0 && cameraRef.current.videoHeight > 0) {
+                  console.log("🎯 Starting detection after delay with video dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+                  detectVideo(
+                    cameraRef.current,
+                    model,
+                    canvasRef.current,
+                    handleObjectsDetected,
+                    selectedModel
+                  );
+                }
+              }, 500);
+            }
+          }}
+          onLoadedMetadata={() => {
+            console.log("📹 Video metadata loaded with dimensions:", cameraRef.current.videoWidth, "x", cameraRef.current.videoHeight);
+          }}
         />
         <canvas
           width={model.inputShape[1]}

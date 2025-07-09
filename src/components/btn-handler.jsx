@@ -2,29 +2,37 @@ import { useState } from "react";
 import { Webcam } from "../utils/webcam";
 
 const ButtonHandler = ({ cameraRef }) => {
-  const [streaming, setStreaming] = useState(null); // streaming state
-  const webcam = new Webcam(); // webcam handler
+  const [streaming, setStreaming] = useState(null);
+  const webcam = new Webcam();
+
+  const handleCameraToggle = async () => {
+    if (streaming === null) {
+      try {
+        await webcam.open(cameraRef.current);
+        
+        // Show video and apply styling
+        cameraRef.current.style.display = "block";
+        cameraRef.current.style.width = "100%";
+        cameraRef.current.style.maxWidth = "720px";
+        cameraRef.current.style.height = "auto";
+        cameraRef.current.style.borderRadius = "10px";
+        
+        setStreaming("camera");
+      } catch (error) {
+        console.error("❌ Error opening camera:", error);
+        alert("Failed to open camera: " + error.message);
+      }
+    } else {
+      webcam.close(cameraRef.current);
+      cameraRef.current.style.display = "none";
+      setStreaming(null);
+    }
+  };
 
   return (
     <div className="btn-container">
-      {/* Webcam Handler */}
-      <button
-        onClick={() => {
-          // if not streaming
-          if (streaming === null) {
-            webcam.open(cameraRef.current); // open webcam
-            cameraRef.current.style.display = "block"; // show camera
-            setStreaming("camera"); // set streaming to camera
-          }
-          // closing webcam streaming
-          else if (streaming === "camera") {
-            webcam.close(cameraRef.current);
-            cameraRef.current.style.display = "none";
-            setStreaming(null);
-          }
-        }}
-      >
-        {streaming === "camera" ? "Close" : "Open"} Webcam
+      <button onClick={handleCameraToggle}>
+        {streaming === "camera" ? "Close Camera" : "Start Camera"}
       </button>
     </div>
   );

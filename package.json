@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "scripts": {
     "start": "vite --host",
+    "start:https": "vite --host",
+    "start:server": "cd server && npm start",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "gh-pages -d dist"
