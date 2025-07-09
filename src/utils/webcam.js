@@ -4,33 +4,29 @@
 export class Webcam {
   /**
    * Open webcam and stream it through video tag.
-   * @param {HTMLVideoElement} videoRef video tag reference
+   * @param {HTMLVideoElement} cameraRef camera tag reference
    */
-  open = (videoRef) => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices
-        .getUserMedia({
-          audio: false,
-          video: {
-            facingMode: "environment",
-          },
-        })
-        .then((stream) => {
-          videoRef.srcObject = stream;
-        });
-    } else alert("Can't open Webcam!");
+  open = (cameraRef) => {
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((stream) => {
+        cameraRef.srcObject = stream;
+      })
+      .catch((err) => {
+        console.error("Error accessing webcam: ", err);
+      });
   };
 
   /**
    * Close opened webcam.
-   * @param {HTMLVideoElement} videoRef video tag reference
+   * @param {HTMLVideoElement} cameraRef camera tag reference
    */
-  close = (videoRef) => {
-    if (videoRef.srcObject) {
-      videoRef.srcObject.getTracks().forEach((track) => {
+  close = (cameraRef) => {
+    if (cameraRef.srcObject) {
+      cameraRef.srcObject.getTracks().forEach((track) => {
         track.stop();
       });
-      videoRef.srcObject = null;
-    } else alert("Please open Webcam first!");
+      cameraRef.srcObject = null;
+    }
   };
 }

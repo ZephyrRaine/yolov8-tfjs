@@ -16,9 +16,7 @@ const App = () => {
   const [hasCaptured, setHasCaptured] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
 
-  const imageRef = useRef(null);
   const cameraRef = useRef(null);
-  const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
   const analyseImage = async (base64Image) => {
@@ -146,20 +144,6 @@ const App = () => {
       </div>
 
       <div className="content">
-        <img
-          src="#"
-          ref={imageRef}
-          onLoad={() =>
-            detect(
-              imageRef.current,
-              model,
-              canvasRef.current,
-              () => {},
-              handleObjectsDetected,
-              selectedModel
-            )
-          }
-        />
         <video
           autoPlay
           muted
@@ -167,20 +151,6 @@ const App = () => {
           onPlay={() =>
             detectVideo(
               cameraRef.current,
-              model,
-              canvasRef.current,
-              handleObjectsDetected,
-              selectedModel
-            )
-          }
-        />
-        <video
-          autoPlay
-          muted
-          ref={videoRef}
-          onPlay={() =>
-            detectVideo(
-              videoRef.current,
               model,
               canvasRef.current,
               handleObjectsDetected,
@@ -227,9 +197,7 @@ const App = () => {
       )}
 
       <ButtonHandler
-        imageRef={imageRef}
         cameraRef={cameraRef}
-        videoRef={videoRef}
       />
     </div>
   );
